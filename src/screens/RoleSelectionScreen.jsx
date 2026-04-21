@@ -41,18 +41,6 @@ const RoleSelectionScreen = ({ onContinue, onLogin }) => {
             icon: Tractor,
         },
         {
-            id: 'user',
-            title: 'Customer/Buyer',
-            description: 'Buy fresh produce daily',
-            icon: ShoppingBasket,
-        },
-        {
-            id: 'delivery',
-            title: 'Delivery Partner',
-            description: 'Deliver health and freshness',
-            icon: Truck,
-        },
-        {
             id: 'collection_center',
             title: 'Collection Center',
             description: 'Manage produce collection',

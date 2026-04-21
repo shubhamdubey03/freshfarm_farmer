@@ -15,10 +15,7 @@ import SignupScreen from './src/screens/SignupScreen';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import VerifyOTPScreen from './src/screens/VerifyOTPScreen';
-import HomeScreen from './src/screens/HomeScreen';
 import VendorDashboardScreen from './src/screens/VendorDashboardScreen';
-import DeliveryDashboardScreen from './src/screens/Delivery/DeliveryDashboardScreen';
-import DeliveryTripScreen from './src/screens/Delivery/DeliveryTripScreen';
 import VendorStockScreen from './src/screens/VendorStockScreen';
 import VendorProfileScreen from './src/screens/VendorProfileScreen';
 import FarmSettingsScreen from './src/screens/vendor/FarmSettingsScreen';
@@ -27,20 +24,6 @@ import DeliveryPreferencesScreen from './src/screens/vendor/DeliveryPreferencesS
 import PayoutHistoryScreen from './src/screens/vendor/PayoutHistoryScreen';
 import AddProductScreen from './src/screens/AddProductScreen';
 import VendorOrdersScreen from './src/screens/VendorOrdersScreen';
-import CategoriesScreen from './src/screens/OrderProduct/CategoriesScreen';
-import ProductDetailScreen from './src/screens/OrderProduct/ProductDetailScreen';
-import CheckoutScreen from './src/screens/payment/CheckoutScreen';
-import OrderSuccessScreen from './src/screens/OrderProduct/OrderSuccessScreen';
-import TrackOrderScreen from './src/screens/OrderProduct/TrackOrderScreen';
-import OrdersScreen from './src/screens/OrderProduct/OrdersScreen';
-import ProfileScreen from './src/screens/userProfile/ProfileScreen';
-import EditProfileScreen from './src/screens/userProfile/EditProfileScreen';
-import DeliveryAddressesScreen from './src/screens/Delivery/DeliveryAddressesScreen';
-import PaymentMethodsScreen from './src/screens/userProfile/PaymentMethodsScreen';
-import WalletScreen from './src/screens/userProfile/WalletScreen';
-import HelpSupportScreen from './src/screens/userProfile/HelpSupportScreen';
-import EarningsScreen from './src/screens/Delivery/EarningsScreen';
-import DeliveryProfileScreen from './src/screens/Delivery/DeliveryProfileScreen';
 import CollectionCenterDashboardScreen from './src/screens/CollectionCenter/CollectionCenterDashboardScreen';
 
 const RootNavigator = () => {
@@ -53,23 +36,18 @@ const RootNavigator = () => {
 
   const currentRole = user?.role || user?.user_role || userRole;
 
-  console.log("currentRole", currentRole);
-
   // Update starting screen based on auth state when app is ready
   useEffect(() => {
     if (isAppReady && !initialized) {
       if (user) {
-        // Check stored user role if it exists in user object
         const role = user.role || user.user_role || userRole;
-        setUserRole(role); // Update userRole state
+        setUserRole(role);
         if (role === 'farmer' || role === 'vendor') {
           setCurrentScreen('vendor-dashboard');
-        } else if (role === 'delivery') {
-          setCurrentScreen('delivery-dashboard');
         } else if (role === 'collection_center') {
           setCurrentScreen('collection-center-dashboard');
         } else {
-          setCurrentScreen('home');
+          setCurrentScreen('role');
         }
       }
       setInitialized(true);
@@ -84,10 +62,6 @@ const RootNavigator = () => {
     setPhoneNumber(phone);
     setUserRole(role);
     setCurrentScreen('verify-otp');
-  };
-
-  const handleNavigateProduct = () => {
-    setCurrentScreen('product-detail');
   };
 
   const handleLogout = async () => {
@@ -130,12 +104,10 @@ const RootNavigator = () => {
           onSuccess={() => {
             if (currentRole === 'farmer' || currentRole === 'vendor') {
               setCurrentScreen('vendor-dashboard');
-            } else if (currentRole === 'delivery') {
-              setCurrentScreen('delivery-dashboard');
             } else if (currentRole === 'collection_center') {
-              setCurrentScreen('create-collection-center');
+              setCurrentScreen('collection-center-dashboard');
             } else {
-              setCurrentScreen('home');
+              setCurrentScreen('role');
             }
           }}
         />
@@ -147,36 +119,10 @@ const RootNavigator = () => {
           onAddProduct={() => setCurrentScreen('add-product')}
           onLogout={handleLogout}
         />
-      ) : currentScreen === 'delivery-dashboard' ? (
-        <DeliveryDashboardScreen
-          onNavigateProfile={() => setCurrentScreen('profile')}
-          onLogout={handleLogout}
-          onStartTrip={() => setCurrentScreen('delivery-trip')}
-          onNavigateTrips={() => setCurrentScreen('delivery-trips')}
-          onNavigateEarnings={() => setCurrentScreen('earnings')}
-        />
       ) : currentScreen === 'collection-center-dashboard' ? (
         <CollectionCenterDashboardScreen
           onLogout={handleLogout}
-          onNavigateProfile={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'delivery-trip' ? (
-        <DeliveryTripScreen
-          onBack={() => setCurrentScreen('delivery-dashboard')}
-          onNavigateProfile={() => setCurrentScreen('profile')}
-          onNavigateTrips={() => setCurrentScreen('delivery-trips')}
-          onNavigateEarnings={() => setCurrentScreen('earnings')}
-          onConfirmOtp={() => {
-            Alert.alert('Success', 'Order delivered successfully!');
-            setCurrentScreen('delivery-dashboard');
-          }}
-        />
-      ) : currentScreen === 'earnings' ? (
-        <EarningsScreen
-          onBack={() => setCurrentScreen('delivery-dashboard')}
-          onNavigateHome={() => setCurrentScreen('delivery-dashboard')}
-          onNavigateTrips={() => setCurrentScreen('delivery-trips')}
-          onNavigateProfile={() => setCurrentScreen('profile')}
+          onNavigateProfile={() => setCurrentScreen('vendor-profile')}
         />
       ) : currentScreen === 'vendor-orders' ? (
         <VendorOrdersScreen
@@ -221,116 +167,12 @@ const RootNavigator = () => {
         <PayoutHistoryScreen
           onBack={() => setCurrentScreen('vendor-profile')}
         />
-      ) : currentScreen === 'add-product' ? (
+      ) : (
         <AddProductScreen
           onBack={() => setCurrentScreen('vendor-dashboard')}
           onSave={() => {
             setCurrentScreen('vendor-stock');
           }}
-        />
-      ) : currentScreen === 'home' ? (
-        <HomeScreen
-          onNavigateCategories={() => setCurrentScreen('categories')}
-          onNavigateProduct={handleNavigateProduct}
-          onNavigateCheckout={() => setCurrentScreen('checkout')}
-          onNavigateOrders={() => setCurrentScreen('orders')}
-          onNavigateProfile={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'categories' ? (
-        <CategoriesScreen
-          onNavigateHome={() => setCurrentScreen('home')}
-          onNavigateProduct={handleNavigateProduct}
-          onNavigateCheckout={() => setCurrentScreen('checkout')}
-          onNavigateOrders={() => setCurrentScreen('orders')}
-          onNavigateProfile={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'product-detail' ? (
-        <ProductDetailScreen
-          onBack={() => setCurrentScreen('home')}
-          onAddToCart={() => {
-            Alert.alert('Added to Cart', 'Your item has been added to the cart.');
-            setCurrentScreen('home');
-          }}
-          onNavigateCheckout={() => setCurrentScreen('checkout')}
-        />
-      ) : currentScreen === 'checkout' ? (
-        <CheckoutScreen
-          onBack={() => setCurrentScreen('home')}
-          onNavigateHome={() => setCurrentScreen('home')}
-          onNavigateCategories={() => setCurrentScreen('categories')}
-          onNavigateOrders={() => setCurrentScreen('orders')}
-          onNavigateProfile={() => setCurrentScreen('profile')}
-          onPlaceOrder={() => {
-            setCurrentScreen('order-success');
-          }}
-        />
-      ) : currentScreen === 'order-success' ? (
-        <OrderSuccessScreen
-          onTrackOrder={() => {
-            setCurrentScreen('track-order');
-          }}
-          onContinueShopping={() => setCurrentScreen('home')}
-        />
-      ) : currentScreen === 'orders' ? (
-        <OrdersScreen
-          onNavigateHome={() => setCurrentScreen('home')}
-          onNavigateCategories={() => setCurrentScreen('categories')}
-          onNavigateCheckout={() => setCurrentScreen('checkout')}
-          onNavigateTrackOrder={(orderId: string) => setCurrentScreen('track-order')}
-          onNavigateProfile={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'profile' ? (
-        currentRole === 'delivery' ? (
-          <DeliveryProfileScreen
-            onBack={() => setCurrentScreen('delivery-dashboard')}
-            onLogout={handleLogout}
-            onNavigateHome={() => setCurrentScreen('delivery-dashboard')}
-            onNavigateTrips={() => setCurrentScreen('delivery-trips')}
-            onNavigateEarnings={() => setCurrentScreen('earnings')}
-          />
-        ) : (
-          <ProfileScreen
-            onNavigateHome={() => setCurrentScreen('home')}
-            onNavigateCategories={() => setCurrentScreen('categories')}
-            onNavigateCheckout={() => setCurrentScreen('checkout')}
-            onNavigateOrders={() => setCurrentScreen('orders')}
-            onLogout={() => setCurrentScreen('role')}
-            onEditProfile={() => setCurrentScreen('edit-profile')}
-            onNavigateAddresses={() => setCurrentScreen('delivery-addresses')}
-            onNavigatePayment={() => setCurrentScreen('payment-methods')}
-            onNavigateWallet={() => setCurrentScreen('wallet')}
-            onNavigateHelp={() => setCurrentScreen('help-support')}
-          />
-        )
-      ) : currentScreen === 'edit-profile' ? (
-        <EditProfileScreen
-          onBack={() => setCurrentScreen('profile')}
-          onSave={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'delivery-addresses' ? (
-        <DeliveryAddressesScreen
-          onBack={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'payment-methods' ? (
-        <PaymentMethodsScreen
-          onBack={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'wallet' ? (
-        <WalletScreen
-          onBack={() => setCurrentScreen('profile')}
-        />
-      ) : currentScreen === 'help-support' ? (
-        <HelpSupportScreen
-          onBack={() => setCurrentScreen('profile')}
-        />
-      ) : (
-        <TrackOrderScreen
-          onBack={() => setCurrentScreen('home')}
-          onNavigateHome={() => setCurrentScreen('home')}
-          onNavigateCategories={() => setCurrentScreen('categories')}
-          onNavigateCheckout={() => setCurrentScreen('checkout')}
-          onNavigateOrders={() => setCurrentScreen('orders')}
-          onNavigateProfile={() => setCurrentScreen('profile')}
         />
       )}
     </>
@@ -346,21 +188,5 @@ function App() {
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  mainApp: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  welcomeText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  }
-});
 
 export default App;
