@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }) => {
         loadAuthData();
     }, []);
 
-    const sendOtp = async (phoneNumber, countryCode) => {
+    const sendOtp = async (phoneNumber, countryCode = "+91") => {
         setLoading(true);
         setError(null);
         try {
@@ -84,11 +84,10 @@ export const AuthProvider = ({ children }) => {
             });
 
             const responseText = await response.text();
-            console.log("responseText", responseText);
             let data;
             try {
                 data = JSON.parse(responseText);
-                console.log("verify response data", data);
+
             } catch (e) {
                 console.error('Failed to parse response as JSON:', responseText);
                 throw new Error('Server returned an unexpected response.');
@@ -119,6 +118,10 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const resendOtp = async (phoneNumber, countryCode = "+91") => {
+        return await sendOtp(phoneNumber, countryCode);
+    };
+
     const register = async (userData) => {
         setLoading(true);
         setError(null);
@@ -128,7 +131,6 @@ export const AuthProvider = ({ children }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData),
             });
-
             const responseText = await response.text();
             let data;
             try {
@@ -139,18 +141,6 @@ export const AuthProvider = ({ children }) => {
             }
 
             if (response.ok) {
-                const authToken = data.token || data.access || data.access_token;
-                const userProfile = data.user;
-
-                if (authToken) {
-                    await AsyncStorage.setItem('token', authToken);
-                    setToken(authToken);
-                }
-                if (userProfile) {
-                    await AsyncStorage.setItem('user', JSON.stringify(userProfile));
-                    setUser(userProfile);
-                }
-
                 setLoading(false);
                 return { success: true, data };
             } else {
@@ -174,8 +164,66 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const updateUserData = async (newData) => {
+        try {
+            const updatedUser = { ...user, ...newData };
+            await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+            setUser(updatedUser);
+            return true;
+        } catch (e) {
+            console.error('Error updating user data:', e);
+            return false;
+        }
+    };
+
+    const googleLogin = async (idToken, role) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(API_URLS.GOOGLE_LOGIN, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token: idToken, role }),
+            });
+
+            const responseText = await response.text();
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                console.error('Failed to parse response as JSON:', responseText);
+                throw new Error('Server returned an unexpected response.');
+            }
+
+            if (response.ok) {
+                const authToken = data.token || data.access || data.access_token;
+                const userData = data.user;
+
+                if (authToken) {
+                    await AsyncStorage.setItem('token', authToken);
+                    setToken(authToken);
+                }
+                if (userData) {
+                    await AsyncStorage.setItem('user', JSON.stringify(userData));
+                    setUser(userData);
+                }
+
+                setLoading(false);
+                return { success: true, data };
+            } else {
+                throw new Error(data.message || data.error || 'Google Login failed');
+            }
+        } catch (err) {
+            setLoading(false);
+            setError(err.message);
+            return { success: false, error: err.message };
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, loading, isAppReady, error, sendOtp, verifyOtp, register, logout }}>
+        <AuthContext.Provider value={{ user, token, loading, isAppReady, error, sendOtp, verifyOtp, resendOtp, register, googleLogin, logout, updateUserData }}>
             {children}
         </AuthContext.Provider>
     );

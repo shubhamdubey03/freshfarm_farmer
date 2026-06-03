@@ -6,14 +6,30 @@ import {
     TouchableOpacity,
     StatusBar,
     Animated,
+    Alert,
 } from 'react-native';
-import { Tractor, ShoppingBasket, Truck, ArrowRight, Warehouse } from 'lucide-react-native';
+import { Tractor, ShoppingBasket, ArrowRight, Warehouse } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const RoleSelectionScreen = ({ onContinue, onLogin }) => {
     const [selectedRole, setSelectedRole] = useState(null);
-    console.log("====", onLogin)
+
+    const handleContinue = () => {
+        if (!selectedRole) {
+            Alert.alert('Selection Required', 'Please select a role to continue.');
+            return;
+        }
+        onContinue(selectedRole);
+    };
+
+    const handleLogin = () => {
+        if (!selectedRole) {
+            Alert.alert('Selection Required', 'Please select a role to login.');
+            return;
+        }
+        onLogin(selectedRole);
+    };
     // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(30)).current;
@@ -31,14 +47,20 @@ const RoleSelectionScreen = ({ onContinue, onLogin }) => {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, []);
+    }, [fadeAnim, slideAnim]);
 
     const roles = [
         {
             id: 'farmer',
-            title: 'Farmer/Vendor',
-            description: 'Sell your harvest directly',
+            title: 'Farmer',
+            description: 'Sell your fresh harvest directly',
             icon: Tractor,
+        },
+        {
+            id: 'vendor',
+            title: 'Vendor',
+            description: 'Market and sell your products',
+            icon: ShoppingBasket,
         },
         {
             id: 'collection_center',
@@ -102,13 +124,13 @@ const RoleSelectionScreen = ({ onContinue, onLogin }) => {
                             <TouchableOpacity
                                 style={styles.continueButton}
                                 activeOpacity={0.8}
-                                onPress={() => onContinue(selectedRole)}
+                                onPress={handleContinue}
                             >
                                 <Text style={styles.continueButtonText}>Continue to Signup</Text>
                                 <ArrowRight size={20} color="#fff" strokeWidth={2.5} />
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.loginContainer} onPress={() => onLogin(selectedRole)}>
+                            <TouchableOpacity style={styles.loginContainer} onPress={handleLogin}>
                                 <Text style={styles.loginText}>
                                     Already have an account? <Text style={styles.loginLink}>Login</Text>
                                 </Text>

@@ -19,10 +19,12 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { useAuth } from '../context/AuthContext';
 import API_URLS from '../config/api';
 
-const LoginScreen = ({ onBack, onSignup, onContinue, role }) => {
+const LoginScreen = ({ onBack, onSignup, onContinue, onLoginSuccess, role }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
-    const { sendOtp, loading, error } = useAuth();
+    const [phoneError, setPhoneError] = useState('');
+    const { sendOtp, loading, error, googleLogin } = useAuth();
     const [countryCode, setCountryCode] = useState('+91');
+    const [countryCodeError, setCountryCodeError] = useState('');
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -30,7 +32,7 @@ const LoginScreen = ({ onBack, onSignup, onContinue, role }) => {
 
     useEffect(() => {
         GoogleSignin.configure({
-            webClientId: '957154860735-1582fvgetnfjqle730eth5a9gcponrfp.apps.googleusercontent.com',
+            webClientId: '543499255135-sp6gmbeb2l46dnu41lmjhg854r9dttd2.apps.googleusercontent.com',
             offlineAccess: true,
         });
 
@@ -46,17 +48,60 @@ const LoginScreen = ({ onBack, onSignup, onContinue, role }) => {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, []);
+    }, [fadeAnim, slideAnim]);
+
+    const handlePhoneChange = (text) => {
+        const cleaned = text.replace(/[^0-9]/g, '');
+        setPhoneNumber(cleaned);
+        if (phoneError) {
+            if (cleaned.length === 10) {
+                setPhoneError('');
+            } else if (cleaned.length === 0) {
+                setPhoneError('Phone number is required');
+            } else {
+                setPhoneError('Please enter a valid 10-digit phone number');
+            }
+        }
+    };
+
+    const handleCountryCodeChange = (text) => {
+        setCountryCode(text);
+        if (countryCodeError) {
+            if (/^\+\d{1,4}$/.test(text)) {
+                setCountryCodeError('');
+            } else if (text.length === 0) {
+                setCountryCodeError('Country code is required');
+            } else {
+                setCountryCodeError('Invalid code (e.g. +91)');
+            }
+        }
+    };
 
     const handleSendOTP = async () => {
-        if (!phoneNumber || phoneNumber.length < 10) {
-            Alert.alert('Error', 'Please enter a valid phone number');
-            console.log("===========", phoneNumber)
+        let valid = true;
+        setPhoneError('');
+        setCountryCodeError('');
+
+        if (!countryCode) {
+            setCountryCodeError('Country code is required');
+            valid = false;
+        } else if (!/^\+\d{1,4}$/.test(countryCode)) {
+            setCountryCodeError('Invalid code (e.g. +91)');
+            valid = false;
+        }
+
+        if (!phoneNumber) {
+            setPhoneError('Phone number is required');
+            valid = false;
+        } else if (!/^\d{10}$/.test(phoneNumber)) {
+            setPhoneError('Please enter a valid 10-digit phone number');
+            valid = false;
+        }
+
+        if (!valid) {
             return;
         }
 
-        // const fullPhone = phoneNumber;
-        // const country_code = "+91";
         const result = await sendOtp(phoneNumber, countryCode);
         console.log("111111111111222222222222", result);
         if (result.success) {
@@ -70,7 +115,7 @@ const LoginScreen = ({ onBack, onSignup, onContinue, role }) => {
             ) {
                 Alert.alert('Success', 'OTP sent successfully!');
                 setTimeout(() => {
-                    onContinue(phoneNumber, role);
+                    onContinue(phoneNumber, result.data.role);
                 }, 300);
             } else {
                 Alert.alert('Access Denied', 'There is no account associated with this phone number for the selected role.');
@@ -89,33 +134,25 @@ const LoginScreen = ({ onBack, onSignup, onContinue, role }) => {
             console.log("*******************mid************");
             console.log("idToken", idToken);
 
-            // Send token to backend
-            const response = await fetch(API_URLS.GOOGLE_LOGIN, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ token: idToken }),
-            });
-            const data = await response.text();
-            console.log("*******************************");
-            console.log("response", data);
-            if (response.ok) {
-                console.log('Login success:', data);
+            const result = await googleLogin(idToken, role);
+            if (result.success) {
                 Alert.alert('Success', 'Login Successful!');
+                const loggedInUser = result.data.user;
+                if (onLoginSuccess) {
+                    onLoginSuccess(loggedInUser.role);
+                }
             } else {
-                console.error('Login failed:', data);
-                Alert.alert('Error', 'Login failed: ' + (data.error || 'Unknown error'));
+                Alert.alert('Error', result.error || 'Login failed');
             }
-        } catch (error) {
-            if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        } catch (err) {
+            if (err.code === statusCodes.SIGN_IN_CANCELLED) {
                 console.log('User cancelled sign in');
-            } else if (error.code === statusCodes.IN_PROGRESS) {
+            } else if (err.code === statusCodes.IN_PROGRESS) {
                 console.log('Sign in in progress');
-            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+            } else if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
                 Alert.alert('Error', 'Play services not available');
             } else {
-                console.error('Google Sign-In Error:', error);
+                console.error('Google Sign-In Error:', err);
                 Alert.alert('Error', 'An error occurred during Google Sign-In');
             }
         }
@@ -148,20 +185,39 @@ const LoginScreen = ({ onBack, onSignup, onContinue, role }) => {
                             <Text style={styles.inputLabel}>Phone Number</Text>
                             <View style={styles.inputContainer}>
                                 <TextInput
-                                    style={[styles.input, { maxWidth: 80 }]}
+                                    style={[
+                                        styles.input,
+                                        { maxWidth: 80 },
+                                        countryCodeError ? styles.inputError : null
+                                    ]}
                                     value={countryCode}
-                                    onChangeText={setCountryCode}
+                                    onChangeText={handleCountryCodeChange}
                                     keyboardType="phone-pad"
+                                    maxLength={5}
                                 />
                                 <TextInput
-                                    style={styles.input}
+                                    style={[
+                                        styles.input,
+                                        phoneError ? styles.inputError : null
+                                    ]}
                                     placeholder="Enter phone number"
                                     placeholderTextColor="#94A3B8"
                                     keyboardType="phone-pad"
                                     value={phoneNumber}
-                                    onChangeText={setPhoneNumber}
+                                    onChangeText={handlePhoneChange}
+                                    maxLength={10}
                                 />
                             </View>
+                            {(countryCodeError || phoneError) && (
+                                <View style={styles.errorContainer}>
+                                    {countryCodeError ? (
+                                        <Text style={styles.errorText}>• {countryCodeError}</Text>
+                                    ) : null}
+                                    {phoneError ? (
+                                        <Text style={styles.errorText}>• {phoneError}</Text>
+                                    ) : null}
+                                </View>
+                            )}
 
                             <TouchableOpacity
                                 style={[styles.otpButton, loading && styles.disabledButton]}
@@ -399,6 +455,20 @@ const styles = StyleSheet.create({
         backgroundColor: '#CBD5E1',
         shadowOpacity: 0,
         elevation: 0,
+    },
+    inputError: {
+        borderColor: '#EF4444',
+    },
+    errorContainer: {
+        marginTop: -16,
+        marginBottom: 20,
+        gap: 4,
+    },
+    errorText: {
+        color: '#EF4444',
+        fontSize: 13,
+        fontWeight: '600',
+        marginLeft: 4,
     },
 });
 

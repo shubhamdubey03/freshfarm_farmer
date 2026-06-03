@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,21 +9,29 @@ import {
     StatusBar,
     Image,
     Dimensions,
+    ActivityIndicator,
+    Alert,
+    PermissionsAndroid,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-    ChevronLeft, 
-    Camera, 
-    MapPin, 
-    Clock, 
-    Info, 
+import {
+    ChevronLeft,
+    Camera,
+    MapPin,
+    Clock,
+    Info,
     Save,
     Map
 } from 'lucide-react-native';
+import { useAuth } from '../../context/AuthContext';
+import { apiFunction } from '../../config/apifunction';
+import { API_URLS } from '../../config/api';
+import Geolocation from '@react-native-community/geolocation';
 
 const { width } = Dimensions.get('window');
 
-const InputField = ({ label, value, onChangeText, placeholder, icon: Icon, multiline = false }) => (
+const InputField = ({ label, value, onChangeText, placeholder, icon: Icon, multiline = false, ...rest }) => (
     <View style={styles.inputContainer}>
         <Text style={styles.label}>{label}</Text>
         <View style={[styles.inputWrapper, multiline && styles.multilineWrapper]}>
@@ -36,17 +44,143 @@ const InputField = ({ label, value, onChangeText, placeholder, icon: Icon, multi
                 placeholderTextColor="#94A3B8"
                 multiline={multiline}
                 textAlignVertical={multiline ? 'top' : 'center'}
+                {...rest}
             />
         </View>
     </View>
 );
 
-const FarmSettingsScreen = ({ onBack }) => {
-    const [farmName, setFarmName] = useState('Green Valley Farm');
+const FarmSettingsScreen = ({ onBack, role }) => {
+    const { user } = useAuth();
+    const [fetching, setFetching] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [farmName, setFarmName] = useState('');
     const [category, setCategory] = useState('Organic Vegetables & Fruits');
-    const [location, setLocation] = useState('123 Orchard Lane, Valley Views');
+    const [location, setLocation] = useState('');
+    const [latitude, setLatitude] = useState('');
+    const [longitude, setLongitude] = useState('');
     const [openingHours, setOpeningHours] = useState('08:00 AM - 06:00 PM');
     const [description, setDescription] = useState('Pioneering organic farming in the valley for over 15 years. We specialize in pesticide-free, home-grown produce delivered fresh to your doorstep.');
+
+    const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+
+    useEffect(() => {
+        fetchFarmProfile();
+    }, []);
+
+    const getProfileUrl = () => {
+        const actualRole = role || user?.role || user?.user_role;
+        return actualRole === 'farmer' ? API_URLS.FARMER_PROFILE : API_URLS.VENDOR_PROFILE;
+    };
+
+    const fetchFarmProfile = async () => {
+        setFetching(true);
+        try {
+            const url = getProfileUrl();
+            const response = await apiFunction(url, [], {}, 'get', true);
+            console.log('Profile response data:', response.data);
+            if (response.data) {
+                const data = response.data;
+                setFarmName(data.farm_name || '');
+                setLocation(data.farm_location || '');
+                setLatitude(data.latitude ? String(parseFloat(data.latitude).toFixed(6)) : '');
+                setLongitude(data.longitude ? String(parseFloat(data.longitude).toFixed(6)) : '');
+            }
+        } catch (error) {
+            console.error('Fetch vendor profile error:', error);
+            Alert.alert('Error', 'Failed to load vendor settings.');
+        } finally {
+            setFetching(false);
+        }
+    };
+
+    const requestLocationPermission = async () => {
+        if (Platform.OS === 'android') {
+            try {
+                const granted = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                    {
+                        title: 'Location Permission',
+                        message: 'We need access to your location to set your farm coordinates.',
+                        buttonNeutral: 'Ask Me Later',
+                        buttonNegative: 'Cancel',
+                        buttonPositive: 'OK',
+                    },
+                );
+                return granted === PermissionsAndroid.RESULTS.GRANTED;
+            } catch (err) {
+                console.warn(err);
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const handleFetchCurrentLocation = async () => {
+        const hasPermission = await requestLocationPermission();
+        if (!hasPermission) {
+            Alert.alert("Permission Denied", "Cannot access location");
+            return;
+        }
+
+        setIsLoadingLocation(true);
+        Geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                setLatitude(latitude.toFixed(6));
+                setLongitude(longitude.toFixed(6));
+                setIsLoadingLocation(false);
+                Alert.alert("Success", "Coordinates fetched successfully!");
+            },
+            (error) => {
+                setIsLoadingLocation(false);
+                Alert.alert("Location Error", error.message);
+            },
+            { enableHighAccuracy: false, timeout: 30000, maximumAge: 60000 }
+        );
+    };
+
+    const handleSave = async () => {
+        setLoading(true);
+        try {
+            const data = {
+                farm_name: farmName,
+                farm_location: location,
+            };
+            if (latitude) data.latitude = parseFloat(parseFloat(latitude).toFixed(6));
+            if (longitude) data.longitude = parseFloat(parseFloat(longitude).toFixed(6));
+
+            console.log('Saving profile:', data);
+            const url = getProfileUrl();
+            const response = await apiFunction(url, [], data, 'patch', true);
+            console.log('Save response:', response);
+
+            if (response.status === 200 || response.status === 201) {
+                if (response.data) {
+                    setLatitude(response.data.latitude ? String(parseFloat(response.data.latitude).toFixed(6)) : '');
+                    setLongitude(response.data.longitude ? String(parseFloat(response.data.longitude).toFixed(6)) : '');
+                }
+                Alert.alert('Success', 'Vendor settings updated successfully!', [
+                    { text: 'OK', onPress: onBack }
+                ]);
+            } else {
+                Alert.alert('Error', response.error || 'Failed to update vendor settings.');
+            }
+        } catch (error) {
+            console.error('Save profile error:', error);
+            Alert.alert('Error', 'An error occurred while saving.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (fetching) {
+        return (
+            <View style={styles.centered}>
+                <ActivityIndicator size="large" color="#38BDF8" />
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -56,20 +190,20 @@ const FarmSettingsScreen = ({ onBack }) => {
                     <TouchableOpacity style={styles.backButton} onPress={onBack}>
                         <ChevronLeft size={24} color="#1E293B" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Farm Settings</Text>
+                    <Text style={styles.headerTitle}>Vendor Settings</Text>
                     <View style={{ width: 44 }} />
                 </View>
 
-                <ScrollView 
-                    style={styles.scrollView} 
+                <ScrollView
+                    style={styles.scrollView}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
                 >
                     {/* Cover Photo */}
                     <View style={styles.coverPhotoContainer}>
-                        <Image 
-                            source={{ uri: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800' }} 
-                            style={styles.coverPhoto} 
+                        <Image
+                            source={{ uri: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800' }}
+                            style={styles.coverPhoto}
                         />
                         <TouchableOpacity style={styles.changeCoverButton}>
                             <Camera size={20} color="#FFF" />
@@ -79,45 +213,75 @@ const FarmSettingsScreen = ({ onBack }) => {
 
                     {/* Inputs */}
                     <View style={styles.formContainer}>
-                        <InputField 
-                            label="Farm Name" 
-                            value={farmName} 
-                            onChangeText={setFarmName} 
-                            placeholder="Enter farm name" 
+                        <InputField
+                            label="Farm Name"
+                            value={farmName}
+                            onChangeText={setFarmName}
+                            placeholder="Enter farm name"
                         />
-                        <InputField 
-                            label="Category" 
-                            value={category} 
-                            onChangeText={setCategory} 
-                            placeholder="e.g., Organic Dairy" 
+                        <InputField
+                            label="Category"
+                            value={category}
+                            onChangeText={setCategory}
+                            placeholder="e.g., Organic Dairy"
                             icon={Info}
                         />
-                        <InputField 
-                            label="Location" 
-                            value={location} 
-                            onChangeText={setLocation} 
-                            placeholder="Enter farm address" 
+                        <InputField
+                            label="Location"
+                            value={location}
+                            onChangeText={setLocation}
+                            placeholder="Enter farm address"
                             icon={MapPin}
                         />
-                        <InputField 
-                            label="Opening Hours" 
-                            value={openingHours} 
-                            onChangeText={setOpeningHours} 
-                            placeholder="e.g., 09:00 - 18:00" 
+                        <InputField
+                            label="Latitude"
+                            value={latitude}
+                            onChangeText={setLatitude}
+                            placeholder="Latitude (resolved automatically from address)"
+                            icon={Map}
+                            keyboardType="numeric"
+                        />
+                        <InputField
+                            label="Longitude"
+                            value={longitude}
+                            onChangeText={setLongitude}
+                            placeholder="Longitude (resolved automatically from address)"
+                            icon={Map}
+                            keyboardType="numeric"
+                        />
+                        <TouchableOpacity
+                            style={styles.locationButton}
+                            onPress={handleFetchCurrentLocation}
+                            disabled={isLoadingLocation}
+                        >
+                            {isLoadingLocation ? (
+                                <ActivityIndicator color="#0EA5E9" size="small" />
+                            ) : (
+                                <>
+                                    <Map size={18} color="#0EA5E9" />
+                                    <Text style={styles.locationButtonText}>Use Current Location</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                        <InputField
+                            label="Opening Hours"
+                            value={openingHours}
+                            onChangeText={setOpeningHours}
+                            placeholder="e.g., 09:00 - 18:00"
                             icon={Clock}
                         />
-                        <InputField 
-                            label="Description" 
-                            value={description} 
-                            onChangeText={setDescription} 
-                            placeholder="Describe your farm..." 
+                        <InputField
+                            label="Description"
+                            value={description}
+                            onChangeText={setDescription}
+                            placeholder="Describe your farm..."
                             multiline={true}
                         />
                     </View>
 
                     {/* Farm Statistics/Badges Section */}
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Farm Verification</Text>
+                        <Text style={styles.sectionTitle}>vendor Verification</Text>
                     </View>
                     <View style={styles.verificationCard}>
                         <View style={styles.verifiedBadge}>
@@ -130,8 +294,16 @@ const FarmSettingsScreen = ({ onBack }) => {
                     </View>
 
                     {/* Action Button */}
-                    <TouchableOpacity style={styles.saveButton}>
-                        <Text style={styles.saveButtonText}>Save Changes</Text>
+                    <TouchableOpacity
+                        style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                        onPress={handleSave}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <Text style={styles.saveButtonText}>Save Changes</Text>
+                        )}
                     </TouchableOpacity>
                 </ScrollView>
             </SafeAreaView>
@@ -311,6 +483,35 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 18,
         fontWeight: '800',
+    },
+    saveButtonDisabled: {
+        backgroundColor: '#94A3B8',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+    centered: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+    },
+    locationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#F0F9FF',
+        borderWidth: 1.5,
+        borderColor: '#E0F2FE',
+        borderRadius: 16,
+        paddingVertical: 14,
+        marginTop: 5,
+        marginBottom: 20,
+        gap: 8,
+    },
+    locationButtonText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#0EA5E9',
     },
 });
 

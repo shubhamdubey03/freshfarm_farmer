@@ -52,7 +52,7 @@ const VerifyOTPScreen = ({ phoneNumber, onBack, onSuccess }) => {
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [timer, setTimer] = useState(59);
     const inputs = useRef([]);
-    const { verifyOtp, sendOtp, loading } = useAuth();
+    const { verifyOtp, sendOtp, resendOtp, loading } = useAuth();
     const [error, setError] = useState(null);
     const [resending, setResending] = useState(false);
 
@@ -133,7 +133,7 @@ const VerifyOTPScreen = ({ phoneNumber, onBack, onSuccess }) => {
         setError(null);
         setOtp(['', '', '', '', '', '']);
 
-        const result = await sendOtp(phoneNumber);
+        const result = await resendOtp(phoneNumber);
         setResending(false);
 
         if (result.success) {

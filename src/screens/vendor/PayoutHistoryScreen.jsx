@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -7,15 +7,19 @@ import {
     ScrollView,
     StatusBar,
     Dimensions,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
+import { API_URLS } from '../../config/api';
+import { apiFunction } from '../../config/apifunction';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-    ChevronLeft, 
-    History, 
-    ArrowUpRight, 
-    Calendar, 
-    CheckCircle2, 
-    Clock, 
+import {
+    ChevronLeft,
+    History,
+    ArrowUpRight,
+    Calendar,
+    CheckCircle2,
+    Clock,
     AlertCircle,
     Download
 } from 'lucide-react-native';
@@ -44,14 +48,14 @@ const PayoutItem = ({ amount, date, status, id }) => {
             <View style={styles.payoutTop}>
                 <View>
                     <Text style={styles.payoutLabel}>AMOUNT</Text>
-                    <Text style={styles.payoutAmount}>${amount}</Text>
+                    <Text style={styles.payoutAmount}>₹{amount}</Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
                     <StatusIcon size={12} color={statusStyle.color} style={{ marginRight: 4 }} />
                     <Text style={[styles.statusText, { color: statusStyle.color }]}>{status}</Text>
                 </View>
             </View>
-            
+
             <View style={styles.payoutBottom}>
                 <View style={styles.metaRow}>
                     <Calendar size={14} color="#94A3B8" />
@@ -67,14 +71,79 @@ const PayoutItem = ({ amount, date, status, id }) => {
 };
 
 const PayoutHistoryScreen = ({ onBack }) => {
-    const payouts = [
-        { id: 'PAY-88291', amount: '1,240.50', date: 'March 16, 2026', status: 'Processed' },
-        { id: 'PAY-88245', amount: '840.15', date: 'March 09, 2026', status: 'Processed' },
-        { id: 'PAY-88190', amount: '1,480.25', date: 'March 02, 2026', status: 'Pending' },
-        { id: 'PAY-88012', amount: '920.00', date: 'Feb 23, 2026', status: 'Processed' },
-        { id: 'PAY-87988', amount: '1,120.40', date: 'Feb 16, 2026', status: 'Failed' },
-        { id: 'PAY-87945', amount: '780.00', date: 'Feb 09, 2026', status: 'Processed' },
-    ];
+    const [payouts, setPayouts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [totalPaidOut, setTotalPaidOut] = useState(0);
+    const [pendingSettlement, setPendingSettlement] = useState(0);
+    const [isWithdrawing, setIsWithdrawing] = useState(false);
+
+    useEffect(() => {
+        fetchPayouts();
+    }, []);
+
+    const fetchPayouts = async () => {
+        setLoading(true);
+        try {
+            // 1. Fetch payouts list
+            const res = await apiFunction(API_URLS.VENDOR_PAYOUTS, [], {}, 'get', true);
+            let formattedPayouts = [];
+            if (res.data && res.data.results) {
+                formattedPayouts = res.data.results.map(item => {
+                    return {
+                        id: `PAY-${item.id.toString().padStart(5, '0')}`,
+                        amount: parseFloat(item.total_amount).toFixed(2),
+                        date: item.paid_at 
+                            ? new Date(item.paid_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) 
+                            : `${new Date(item.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${new Date(item.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+                        status: item.is_paid ? 'Processed' : 'Pending',
+                    };
+                });
+                setPayouts(formattedPayouts);
+            }
+
+            // 2. Fetch earnings summary
+            const summaryRes = await apiFunction(API_URLS.VENDOR_EARNINGS_SUMMARY, [], {}, 'get', true);
+            if (summaryRes.status === 200 && summaryRes.data) {
+                setTotalPaidOut(parseFloat(summaryRes.data.total_settled || 0));
+                setPendingSettlement(parseFloat(summaryRes.data.pending_settlement || 0));
+            } else {
+                const total = formattedPayouts
+                    .filter(p => p.status === 'Processed')
+                    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+                setTotalPaidOut(total);
+            }
+        } catch (error) {
+            console.error('Error fetching payouts/summary:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleWithdraw = async () => {
+        if (pendingSettlement <= 0) {
+            Alert.alert('No Balance', 'You do not have any pending earnings to withdraw.');
+            return;
+        }
+
+        setIsWithdrawing(true);
+        try {
+            const res = await apiFunction(API_URLS.VENDOR_PAYOUTS, [], {}, 'post', true);
+            if (res.status === 200 || res.status === 201) {
+                Alert.alert(
+                    'Success', 
+                    `Your withdrawal of ₹${pendingSettlement.toFixed(2)} has been successfully processed to your registered bank account!`
+                );
+                fetchPayouts();
+            } else {
+                Alert.alert('Error', res.data?.error || 'Failed to process withdrawal.');
+            }
+        } catch (error) {
+            console.error('Error processing withdrawal:', error);
+            Alert.alert('Error', 'An error occurred during withdrawal.');
+        } finally {
+            setIsWithdrawing(false);
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -90,8 +159,8 @@ const PayoutHistoryScreen = ({ onBack }) => {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView 
-                    style={styles.scrollView} 
+                <ScrollView
+                    style={styles.scrollView}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
                 >
@@ -100,7 +169,7 @@ const PayoutHistoryScreen = ({ onBack }) => {
                         <View style={styles.summaryTop}>
                             <View>
                                 <Text style={styles.summaryLabel}>Total Paid Out</Text>
-                                <Text style={styles.summaryValue}>$12,480.30</Text>
+                                <Text style={styles.summaryValue}>₹{totalPaidOut.toFixed(2)}</Text>
                             </View>
                             <View style={styles.summaryIconBox}>
                                 <ArrowUpRight size={24} color="#FFF" />
@@ -109,6 +178,32 @@ const PayoutHistoryScreen = ({ onBack }) => {
                         <View style={styles.summaryFooter}>
                             <Text style={styles.footerText}>Updated: Just Now</Text>
                         </View>
+                    </View>
+
+                    {/* Pending Settlement Card */}
+                    <View style={styles.pendingCard}>
+                        <View style={styles.pendingTop}>
+                            <View>
+                                <Text style={styles.pendingLabel}>Pending Settlement</Text>
+                                <Text style={styles.pendingValue}>₹{pendingSettlement.toFixed(2)}</Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity
+                            style={[
+                                styles.withdrawButton,
+                                pendingSettlement <= 0 && styles.withdrawButtonDisabled
+                            ]}
+                            onPress={handleWithdraw}
+                            disabled={pendingSettlement <= 0 || isWithdrawing}
+                        >
+                            {isWithdrawing ? (
+                                <ActivityIndicator size="small" color="#FFF" />
+                            ) : (
+                                <Text style={styles.withdrawButtonText}>
+                                    {pendingSettlement > 0 ? 'Withdraw to Bank Account' : 'No Earnings to Withdraw'}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
                     </View>
 
                     {/* Filter Tabs */}
@@ -121,15 +216,23 @@ const PayoutHistoryScreen = ({ onBack }) => {
 
                     {/* Payout List */}
                     <View style={styles.listContainer}>
-                        {payouts.map((item) => (
-                            <PayoutItem 
-                                key={item.id}
-                                id={item.id}
-                                amount={item.amount}
-                                date={item.date}
-                                status={item.status}
-                            />
-                        ))}
+                        {loading ? (
+                            <ActivityIndicator color="#38BDF8" style={{ marginTop: 20 }} />
+                        ) : payouts.length > 0 ? (
+                            payouts.map((item) => (
+                                <PayoutItem
+                                    key={item.id}
+                                    id={item.id}
+                                    amount={item.amount}
+                                    date={item.date}
+                                    status={item.status}
+                                />
+                            ))
+                        ) : (
+                            <View style={{ alignItems: 'center', marginTop: 40 }}>
+                                <Text style={{ color: '#64748B' }}>No payouts found.</Text>
+                            </View>
+                        )}
                     </View>
 
                     {/* Load More */}
@@ -199,6 +302,49 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 15,
         elevation: 8,
+    },
+    pendingCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 28,
+        padding: 24,
+        marginBottom: 30,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.05,
+        shadowRadius: 15,
+        elevation: 4,
+    },
+    pendingTop: {
+        marginBottom: 16,
+    },
+    pendingLabel: {
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '700',
+        letterSpacing: 0.5,
+    },
+    pendingValue: {
+        fontSize: 32,
+        color: '#1E293B',
+        fontWeight: '900',
+        marginTop: 4,
+    },
+    withdrawButton: {
+        backgroundColor: '#10B981',
+        borderRadius: 18,
+        paddingVertical: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    withdrawButtonDisabled: {
+        backgroundColor: '#E2E8F0',
+    },
+    withdrawButtonText: {
+        color: '#FFF',
+        fontSize: 15,
+        fontWeight: '800',
     },
     summaryTop: {
         flexDirection: 'row',

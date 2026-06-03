@@ -1,41 +1,41 @@
 {
   "project_info": {
-    "project_number": "957154860735",
-    "project_id": "farmfresh-91fa5",
-    "storage_bucket": "farmfresh-91fa5.firebasestorage.app"
+    "project_number": "543499255135",
+    "project_id": "freshfarm-farmer",
+    "storage_bucket": "freshfarm-farmer.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:957154860735:android:39e8367e1964f59279300a",
+        "mobilesdk_app_id": "1:543499255135:android:644f81268c18b640b98aea",
         "android_client_info": {
-          "package_name": "com.freshfarm"
+          "package_name": "com.freshfarm.farmer"
         }
       },
       "oauth_client": [
         {
-          "client_id": "957154860735-jttou9v5pgiiprhjp4v9dcasfchoken4.apps.googleusercontent.com",
+          "client_id": "543499255135-b5h33vbm85t2fgodf4srlr8g9d7iejne.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.freshfarm",
+            "package_name": "com.freshfarm.farmer",
             "certificate_hash": "84eee28cad3bce46e979a0c923d2813b93e22c0a"
           }
         },
         {
-          "client_id": "957154860735-1582fvgetnfjqle730eth5a9gcponrfp.apps.googleusercontent.com",
+          "client_id": "543499255135-sp6gmbeb2l46dnu41lmjhg854r9dttd2.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDzlmBWZ2D8cyPjofu-4ODoNcrsTTlUGNQ"
+          "current_key": "AIzaSyCNrAN43-TuQrRZPG-vBO_JC7CgCtHUV9E"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "957154860735-1582fvgetnfjqle730eth5a9gcponrfp.apps.googleusercontent.com",
+              "client_id": "543499255135-sp6gmbeb2l46dnu41lmjhg854r9dttd2.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

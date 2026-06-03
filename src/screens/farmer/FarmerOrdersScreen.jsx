@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,16 +9,21 @@ import {
     StatusBar,
     TextInput,
     Dimensions,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URLS } from '../../config/api';
+import { apiFunction } from '../../config/apifunction';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-    Search, 
-    SlidersHorizontal, 
-    Clock, 
-    LayoutDashboard, 
-    ClipboardList, 
-    Package, 
-    User, 
+import {
+    Search,
+    SlidersHorizontal,
+    Clock,
+    LayoutDashboard,
+    ClipboardList,
+    Package,
+    User,
     Plus,
     ChevronDown
 } from 'lucide-react-native';
@@ -53,52 +58,129 @@ const OrderCard = ({ order, onMarkReady }) => (
         <View style={styles.itemsList}>
             {order.items.map((item, index) => (
                 <View key={index} style={styles.itemRow}>
-                    <Text style={styles.itemName}>{item.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {item.image && (
+                            <Image
+                                source={{ uri: item.image }}
+                                style={{ width: 40, height: 40, borderRadius: 8, marginRight: 12 }}
+                            />
+                        )}
+                        <Text style={styles.itemName}>{item.name}</Text>
+                    </View>
                     <Text style={styles.itemQuantity}>{item.quantity}</Text>
                 </View>
             ))}
         </View>
 
-        <TouchableOpacity 
-            style={styles.markReadyButton}
-            onPress={() => onMarkReady(order.id)}
-        >
-            <Text style={styles.markReadyText}>Mark Ready</Text>
-        </TouchableOpacity>
+        {!order.isReady && (
+            <TouchableOpacity
+                style={styles.markReadyButton}
+                onPress={() => onMarkReady(order.id)}
+            >
+                <Text style={styles.markReadyText}>Mark Ready</Text>
+            </TouchableOpacity>
+        )}
     </View>
 );
 
-const VendorOrdersScreen = ({ onNavigateDashboard, onNavigateStock, onNavigateProfile, onAddProduct, onLogout }) => {
+const FarmerOrdersScreen = ({ onNavigateDashboard, onNavigateStock, onNavigateProfile, onAddProduct, onLogout }) => {
     const [activeTab, setActiveTab] = useState('New');
     const [searchQuery, setSearchQuery] = useState('');
 
-    const orders = [
-        {
-            id: '3RM-8829',
-            pickupTime: '14:30 Today',
-            buyer: {
-                name: 'Sarah Jenkins',
-                avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200',
-            },
-            items: [
-                { name: 'Fresh Tomatoes', quantity: '5.0 kg' },
-                { name: 'Organic Kale', quantity: '2.0 kg' },
-                { name: 'Farm Fresh Eggs', quantity: '2 Dozen' },
-            ]
-        },
-        {
-            id: '3RM-8831',
-            pickupTime: '16:15 Today',
-            buyer: {
-                name: 'Marcus Thorne',
-                avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200',
-            },
-            items: [
-                { name: 'Bell Peppers (Mixed)', quantity: '1.5 kg' },
-                { name: 'Red Onions', quantity: '3.0 kg' },
-            ]
+    const [orders, setOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchOrders();
+    }, []);
+
+    const fetchOrders = async () => {
+        setLoading(true);
+        try {
+            const res = await apiFunction(API_URLS.FARMER_ORDERS, [], {}, 'get', true);
+            if (res.data && res.data.results) {
+                // Load persisted ready states
+                const storedReadyOrders = await AsyncStorage.getItem('readyOrders');
+                const readyOrderIds = storedReadyOrders ? JSON.parse(storedReadyOrders) : [];
+
+                const formattedOrders = res.data.results.map(o => {
+                    const cutoffDate = o.batch_cutoff ? new Date(o.batch_cutoff) : null;
+                    const timeString = cutoffDate ? cutoffDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD';
+
+                    const orderIdStr = o.id.toString();
+                    return {
+                        id: orderIdStr,
+                        pickupTime: timeString,
+                        buyer: {
+                            name: `Batch: ${o.batch_date || 'N/A'}`,
+                            avatar: 'https://images.unsplash.com/photo-1595858223961-00fb8a396e98?w=200',
+                        },
+                        items: [
+                            {
+                                name: o.product_name || 'Product',
+                                quantity: `${o.quantity} ${o.unit || 'units'}`,
+                                image: o.product_image
+                            }
+                        ],
+                        isReady: readyOrderIds.includes(orderIdStr) // Use persisted state
+                    };
+                });
+                setOrders(formattedOrders);
+            }
+        } catch (error) {
+            console.error('Error fetching orders:', error);
+        } finally {
+            setLoading(false);
         }
-    ];
+    };
+
+    const handleMarkReady = async (orderId) => {
+        try {
+            const res = await apiFunction(API_URLS.FARMER_ORDER_READY(orderId), [], {}, 'post', true);
+            if (res.status === 200) {
+                // Optimistically update UI
+                setOrders(prev => prev.map(o => o.id === orderId ? { ...o, isReady: true } : o));
+
+                // Persist to AsyncStorage
+                try {
+                    const storedReadyOrders = await AsyncStorage.getItem('readyOrders');
+                    const readyOrderIds = storedReadyOrders ? JSON.parse(storedReadyOrders) : [];
+                    if (!readyOrderIds.includes(orderId)) {
+                        readyOrderIds.push(orderId);
+                        await AsyncStorage.setItem('readyOrders', JSON.stringify(readyOrderIds));
+                    }
+                } catch (error) {
+                    console.error('Error saving ready state:', error);
+                }
+
+                Alert.alert(
+                    "Order Ready",
+                    "Order marked ready and dispatched to collection center!",
+                    [{ text: "OK" }]
+                );
+            } else {
+                Alert.alert("Error", res.data?.error || "Failed to mark order as ready.");
+            }
+        } catch (error) {
+            console.error('Error marking order ready:', error);
+            Alert.alert("Error", "Something went wrong. Please try again.");
+        }
+    };
+
+    const newOrders = orders.filter(o => !o.isReady);
+    const readyOrders = orders.filter(o => o.isReady);
+
+    let displayOrders = [];
+    if (activeTab === 'New') {
+        displayOrders = newOrders;
+    } else if (activeTab === 'Ready') {
+        displayOrders = readyOrders;
+    }
+
+    const filteredDisplayOrders = displayOrders.filter(o =>
+        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.buyer.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     return (
         <View style={styles.container}>
@@ -128,7 +210,7 @@ const VendorOrdersScreen = ({ onNavigateDashboard, onNavigateStock, onNavigatePr
 
                 {/* Tabs */}
                 <View style={styles.tabsContainer}>
-                    {['New (3)', 'Ready (5)', 'History'].map((tab) => {
+                    {[`New (${newOrders.length})`, `Ready (${readyOrders.length})`, 'History'].map((tab) => {
                         const tabKey = tab.split(' ')[0];
                         const isActive = activeTab === tabKey;
                         return (
@@ -147,32 +229,27 @@ const VendorOrdersScreen = ({ onNavigateDashboard, onNavigateStock, onNavigatePr
                 </View>
 
                 {/* Orders List */}
-                <ScrollView 
+                <ScrollView
                     style={styles.ordersList}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
                 >
-                    {orders.map((order) => (
-                        <OrderCard 
-                            key={order.id} 
-                            order={order} 
-                            onMarkReady={(id) => console.log('Marking ready:', id)}
-                        />
-                    ))}
-
-                    {/* Placeholder for Ready for Pickup Card in History/Next */}
-                    <View style={styles.infoCard}>
-                        <View style={styles.infoCardHeader}>
-                            <View>
-                                <Text style={styles.infoCardLabel}>READY FOR PICKUP</Text>
-                                <Text style={styles.infoCardId}>#3RM-8815</Text>
-                            </View>
-                            <View style={styles.packageBadge}>
-                                <Text style={styles.packageBadgeText}>PACKAGED</Text>
-                            </View>
+                    {loading ? (
+                        <ActivityIndicator color="#38BDF8" style={{ marginTop: 20 }} />
+                    ) : filteredDisplayOrders.length > 0 ? (
+                        filteredDisplayOrders.map((order) => (
+                            <OrderCard
+                                key={order.id}
+                                order={order}
+                                onMarkReady={handleMarkReady}
+                            />
+                        ))
+                    ) : (
+                        <View style={{ alignItems: 'center', marginTop: 40 }}>
+                            <Text style={{ color: '#64748B' }}>No orders found.</Text>
                         </View>
-                        <Text style={styles.infoCardSubtext}>Switch to 'Ready' tab to manage pickups</Text>
-                    </View>
+                    )}
+
                 </ScrollView>
             </SafeAreaView>
 
@@ -369,7 +446,8 @@ const styles = StyleSheet.create({
     itemRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 8,
+        alignItems: 'center',
+        marginBottom: 12,
     },
     itemName: {
         fontSize: 14,
@@ -487,4 +565,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default VendorOrdersScreen;
+export default FarmerOrdersScreen;

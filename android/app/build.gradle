@@ -85,6 +85,15 @@ android {
         versionCode 1
         versionName "1.0"
     }
+    flavorDimensions "app"
+    productFlavors {
+        farmer {
+            dimension "app"
+            applicationId "com.freshfarm.farmer"
+            versionName "1.0"
+            versionCode 1
+        }
+    }
     signingConfigs {
         debug {
             storeFile file('debug.keystore')

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import {
     View,
     Text,
@@ -27,6 +28,9 @@ import {
     Star,
     CheckCircle2
 } from 'lucide-react-native';
+import { API_URLS } from '../../config/api';
+import { apiFunction } from '../../config/apifunction';
+import { ActivityIndicator } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -45,8 +49,30 @@ const MenuItem = ({ icon: Icon, title, extra, isLast, onPress }) => (
     </TouchableOpacity>
 );
 
-const VendorProfileScreen = ({ onNavigateDashboard, onNavigateOrders, onNavigateStock, onNavigateFarmSettings, onNavigatePaymentSettings, onNavigateDeliveryPreferences, onNavigatePayoutHistory, onLogout }) => {
+const VendorProfileScreen = ({ onNavigateDashboard, onNavigateOrders, onNavigateStock, onNavigateFarmSettings, onNavigatePaymentSettings, onNavigateDeliveryPreferences, onNavigatePayoutHistory, onNavigateEditProfile, onLogout }) => {
+    const { user } = useAuth();
     const [isAcceptingOrders, setIsAcceptingOrders] = useState(true);
+    const [profile, setProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchProfile();
+    }, []);
+
+    const fetchProfile = async () => {
+        setLoading(true);
+        try {
+            const response = await apiFunction(API_URLS.VENDOR_PROFILE, [], {}, 'get', true);
+            console.log("profile data", response.data);
+            if (response.data) {
+                setProfile(response.data);
+            }
+        } catch (error) {
+            console.error('Profile fetch error:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -58,23 +84,29 @@ const VendorProfileScreen = ({ onNavigateDashboard, onNavigateOrders, onNavigate
                     contentContainerStyle={styles.scrollContent}
                 >
                     {/* Header/Profile Info */}
-                    <View style={styles.profileHeader}>
-                        <View style={styles.avatarContainer}>
-                            <Image
-                                source={{ uri: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=200' }}
-                                style={styles.avatar}
-                            />
-                            <View style={styles.verifiedBadge}>
-                                <Text style={styles.verifiedText}>VERIFIED</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.farmName}>Green Valley Farm</Text>
-                        <View style={styles.ratingRow}>
-                            <Star size={14} color="#F59E0B" fill="#F59E0B" />
-                            <Text style={styles.ratingText}>4.9</Text>
-                            <Text style={styles.reviewText}>(128 reviews)</Text>
-                        </View>
-                    </View>
+                    <TouchableOpacity style={styles.profileHeader} onPress={onNavigateEditProfile} activeOpacity={0.7}>
+                        {loading ? (
+                            <ActivityIndicator color="#38BDF8" style={{ height: 120 }} />
+                        ) : (
+                            <>
+                                <View style={styles.avatarContainer}>
+                                    <Image
+                                        source={{ uri: profile?.profile_image }}
+                                        style={styles.avatar}
+                                    />
+                                    <View style={styles.verifiedBadge}>
+                                        <Text style={styles.verifiedText}>VERIFIED</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.farmName}>{profile?.first_name + ' ' + profile?.last_name}</Text>
+                                {/* <View style={styles.ratingRow}>
+                                    <Star size={14} color="#F59E0B" fill="#F59E0B" /> */}
+                                {/* <Text style={styles.ratingText}>4.9</Text>
+                                    <Text style={styles.reviewText}>(128 reviews)</Text> */}
+                                {/* </View> */}
+                            </>
+                        )}
+                    </TouchableOpacity>
 
                     {/* Accepting Orders Toggle */}
                     <View style={styles.toggleCard}>
@@ -100,7 +132,7 @@ const VendorProfileScreen = ({ onNavigateDashboard, onNavigateOrders, onNavigate
 
                     {/* Menu Options Group */}
                     <View style={styles.menuGroup}>
-                        <MenuItem icon={Sprout} title="Farm Settings" onPress={onNavigateFarmSettings} />
+                        <MenuItem icon={Sprout} title="Vendor Settings" onPress={onNavigateFarmSettings} />
                         <MenuItem icon={CreditCard} title="Payment Settings" onPress={onNavigatePaymentSettings} />
                         <MenuItem icon={Truck} title="Delivery Preferences" onPress={onNavigateDeliveryPreferences} />
                         <MenuItem icon={History} title="Payout History" onPress={onNavigatePayoutHistory} />
@@ -126,16 +158,13 @@ const VendorProfileScreen = ({ onNavigateDashboard, onNavigateOrders, onNavigate
                     <ClipboardList size={24} color="#94A3B8" />
                     <Text style={styles.navText}>ORDERS</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem} onPress={onNavigateStock}>
-                    <Package size={24} color="#94A3B8" />
-                    <Text style={styles.navText}>STOCK</Text>
-                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.navItem}>
                     <User size={24} color="#38BDF8" />
                     <Text style={[styles.navText, styles.activeNavText]}>PROFILE</Text>
                 </TouchableOpacity>
             </View>
-        </View>
+        </View >
     );
 };
 

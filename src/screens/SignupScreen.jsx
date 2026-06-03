@@ -9,6 +9,7 @@ import {
     Animated,
     ScrollView,
     Dimensions,
+    Alert,
 } from 'react-native';
 import { User, Phone, Mail, ChevronLeft, Check } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -21,8 +22,11 @@ const { width } = Dimensions.get('window');
 
 const SignupScreen = ({ onBack, onLogin, onContinue, role }) => {
     const [fullName, setFullName] = useState('');
+    const [fullNameError, setFullNameError] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
+    const [phoneError, setPhoneError] = useState('');
     const [email, setEmail] = useState('');
+    const [emailError, setEmailError] = useState('');
     const [agree, setAgree] = useState(false);
     const { register, loading, error } = useAuth();
 
@@ -43,27 +47,107 @@ const SignupScreen = ({ onBack, onLogin, onContinue, role }) => {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, []);
+    }, [fadeAnim, slideAnim]);
+
+    const handleNameChange = (text) => {
+        setFullName(text);
+        if (fullNameError) {
+            if (text.trim().length >= 3) {
+                setFullNameError('');
+            } else if (text.trim().length === 0) {
+                setFullNameError('Full name is required');
+            } else {
+                setFullNameError('Name must be at least 3 characters');
+            }
+        }
+    };
+
+    const handlePhoneChange = (text) => {
+        const cleaned = text.replace(/[^0-9]/g, '');
+        setPhoneNumber(cleaned);
+        if (phoneError) {
+            if (cleaned.length === 10) {
+                setPhoneError('');
+            } else if (cleaned.length === 0) {
+                setPhoneError('Phone number is required');
+            } else {
+                setPhoneError('Please enter a valid 10-digit phone number');
+            }
+        }
+    };
+
+    const handleEmailChange = (text) => {
+        setEmail(text);
+        if (emailError) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (emailRegex.test(text.trim())) {
+                setEmailError('');
+            } else if (text.trim().length === 0) {
+                setEmailError('Email address is required');
+            } else {
+                setEmailError('Please enter a valid email address');
+            }
+        }
+    };
 
     const handleSignup = async () => {
-        if (!fullName || !phoneNumber || !email) {
-            alert('Please fill all fields');
+        let valid = true;
+        setFullNameError('');
+        setPhoneError('');
+        setEmailError('');
+
+        // Full Name validation
+        if (!fullName.trim()) {
+            setFullNameError('Full name is required');
+            valid = false;
+        } else if (fullName.trim().length < 3) {
+            setFullNameError('Name must be at least 3 characters');
+            valid = false;
+        }
+
+        // Phone Number validation
+        if (!phoneNumber) {
+            setPhoneError('Phone number is required');
+            valid = false;
+        } else if (!/^\d{10}$/.test(phoneNumber)) {
+            setPhoneError('Please enter a valid 10-digit phone number');
+            valid = false;
+        }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email.trim()) {
+            setEmailError('Email address is required');
+            valid = false;
+        } else if (!emailRegex.test(email.trim())) {
+            setEmailError('Please enter a valid email address');
+            valid = false;
+        }
+
+        if (!valid) {
             return;
         }
 
         const userData = {
-            username: fullName, // Using email as username
-            email: email,
+            username: fullName.trim(),
+            email: email.trim(),
             phone: phoneNumber,
-            user_role: role,
+            role: role,
             country_code: "+91",
         };
+        console.log("userData", userData);
 
         const result = await register(userData);
+        console.log("result", result);
         if (result.success) {
-            onContinue(phoneNumber, role);
+            Alert.alert("Success", "Registration successful", [
+                {
+                    text: "OK",
+                    onPress: () => onLogin()
+                }
+            ]);
         } else {
-            alert(result.error || 'Registration failed');
+            Alert.alert("Error", result.error || 'Registration failed');
         }
     };
 
@@ -110,42 +194,45 @@ const SignupScreen = ({ onBack, onLogin, onContinue, role }) => {
                         <Animated.View style={[styles.form, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
                             <View style={styles.inputGroup}>
                                 <Text style={styles.inputLabel}>Full Name</Text>
-                                <View style={styles.inputContainer}>
+                                <View style={[styles.inputContainer, fullNameError ? styles.inputError : null]}>
                                     <View style={styles.iconBox}>
-                                        <User size={20} color="#94A3B8" />
+                                        <User size={20} color={fullNameError ? "#EF4444" : "#94A3B8"} />
                                     </View>
                                     <TextInput
                                         style={styles.input}
                                         placeholder="John Doe"
                                         placeholderTextColor="#94A3B8"
                                         value={fullName}
-                                        onChangeText={setFullName}
+                                        onChangeText={handleNameChange}
                                     />
                                 </View>
+                                {fullNameError ? <Text style={styles.errorText}>{fullNameError}</Text> : null}
                             </View>
 
                             <View style={styles.inputGroup}>
                                 <Text style={styles.inputLabel}>Phone Number</Text>
-                                <View style={styles.inputContainer}>
+                                <View style={[styles.inputContainer, phoneError ? styles.inputError : null]}>
                                     <View style={styles.iconBox}>
-                                        <Phone size={20} color="#94A3B8" />
+                                        <Phone size={20} color={phoneError ? "#EF4444" : "#94A3B8"} />
                                     </View>
                                     <TextInput
                                         style={styles.input}
-                                        placeholder="+91 1234567890"
+                                        placeholder="10-digit phone number"
                                         placeholderTextColor="#94A3B8"
                                         keyboardType="phone-pad"
                                         value={phoneNumber}
-                                        onChangeText={setPhoneNumber}
+                                        onChangeText={handlePhoneChange}
+                                        maxLength={10}
                                     />
                                 </View>
+                                {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
                             </View>
 
                             <View style={styles.inputGroup}>
                                 <Text style={styles.inputLabel}>Email Address</Text>
-                                <View style={styles.inputContainer}>
+                                <View style={[styles.inputContainer, emailError ? styles.inputError : null]}>
                                     <View style={styles.iconBox}>
-                                        <Mail size={20} color="#94A3B8" />
+                                        <Mail size={20} color={emailError ? "#EF4444" : "#94A3B8"} />
                                     </View>
                                     <TextInput
                                         style={styles.input}
@@ -154,9 +241,10 @@ const SignupScreen = ({ onBack, onLogin, onContinue, role }) => {
                                         keyboardType="email-address"
                                         autoCapitalize="none"
                                         value={email}
-                                        onChangeText={setEmail}
+                                        onChangeText={handleEmailChange}
                                     />
                                 </View>
+                                {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
                             </View>
 
                             <TouchableOpacity
@@ -351,6 +439,17 @@ const styles = StyleSheet.create({
     linkText: {
         color: '#0EA5E9',
         fontWeight: '800',
+    },
+    inputError: {
+        borderColor: '#EF4444',
+        borderWidth: 1.5,
+    },
+    errorText: {
+        color: '#EF4444',
+        fontSize: 13,
+        fontWeight: '600',
+        marginLeft: 4,
+        marginTop: 4,
     },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,12 @@ import {
     StatusBar,
     TextInput,
     Switch,
+    Alert,
+    ActivityIndicator,
+    Modal
 } from 'react-native';
+import { API_URLS } from '../../config/api';
+import { apiFunction } from '../../config/apifunction';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
     Search, 
@@ -22,7 +27,7 @@ import {
     RefreshCcw 
 } from 'lucide-react-native';
 
-const ProductCard = ({ name, category, price, unit, stock, status, image }) => {
+const ProductCard = ({ id, name, category, price, unit, stock, status, image, onNotifyAdmin, onEditStock, showPrice = true }) => {
     const [isActive, setIsActive] = useState(status === 'Active');
 
     return (
@@ -47,9 +52,11 @@ const ProductCard = ({ name, category, price, unit, stock, status, image }) => {
                 </View>
 
                 <Text style={styles.productName}>{name}</Text>
-                <Text style={styles.priceText}>
-                    <Text style={styles.priceSymbol}>$</Text>{price} <Text style={styles.unitText}>/ {unit}</Text>
-                </Text>
+                {showPrice && (
+                    <Text style={styles.priceText}>
+                        <Text style={styles.priceSymbol}>$</Text>{price} <Text style={styles.unitText}>/ {unit}</Text>
+                    </Text>
+                )}
 
                 <View style={styles.cardFooter}>
                     <View>
@@ -59,7 +66,10 @@ const ProductCard = ({ name, category, price, unit, stock, status, image }) => {
                             <Text style={styles.outOfStockText}>Out of Stock</Text>
                         )}
                     </View>
-                    <TouchableOpacity style={[styles.actionButton, stock === 0 && styles.restockButton]}>
+                    <TouchableOpacity 
+                        style={[styles.actionButton, stock === 0 && styles.restockButton]}
+                        onPress={() => stock === 0 ? onNotifyAdmin(id) : onEditStock(id, stock)}
+                    >
                         {stock > 0 ? (
                             <>
                                 <Edit3 size={14} color="#38BDF8" style={styles.actionIcon} />
@@ -68,7 +78,7 @@ const ProductCard = ({ name, category, price, unit, stock, status, image }) => {
                         ) : (
                             <>
                                 <RefreshCcw size={14} color="#38BDF8" style={styles.actionIcon} />
-                                <Text style={styles.actionButtonText}>Restock</Text>
+                                <Text style={styles.actionButtonText}>Notify Admin</Text>
                             </>
                         )}
                     </TouchableOpacity>
@@ -80,6 +90,83 @@ const ProductCard = ({ name, category, price, unit, stock, status, image }) => {
 
 const VendorStockScreen = ({ onNavigateDashboard, onNavigateOrders, onNavigateProfile, onAddProduct, onLogout }) => {
     const [activeTab, setActiveTab] = useState('active');
+    const [products, setProducts] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+    const [editingProduct, setEditingProduct] = useState(null);
+    const [newStock, setNewStock] = useState('');
+
+    useEffect(() => {
+        fetchProducts();
+    }, []);
+
+    const fetchProducts = async () => {
+        setLoading(true);
+        try {
+            const res = await apiFunction(API_URLS.VENDOR_PRODUCTS, [], {}, 'get', true);
+            if (res.data) {
+                setProducts(res.data.results || []);
+            }
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleNotifyAdmin = async (productId) => {
+        try {
+            // Using placeholder endpoint for NOTIFY_ADMIN
+            const response = await apiFunction(`${API_URLS.NOTIFY_ADMIN}${productId}/`, [], {}, 'post', true);
+            Alert.alert("Success", "Admin has been notified that this product is out of stock.");
+        } catch (error) {
+            Alert.alert("Error", "Failed to notify admin. Please try again.");
+        }
+    };
+
+    const handleEditStock = (id, currentStock) => {
+        setEditingProduct(id);
+        setNewStock(currentStock.toString());
+        setIsEditModalVisible(true);
+    };
+
+    const submitStockUpdate = async () => {
+        if (!editingProduct) return;
+        try {
+            const payload = { stock: parseInt(newStock) };
+            const response = await apiFunction(`${API_URLS.VENDOR_PRODUCTS}${editingProduct}/`, [], payload, 'patch', true);
+            
+            if (response && response.error) {
+                Alert.alert('Error', response.error || 'Failed to update stock');
+                return;
+            }
+
+            // Update local state
+            setProducts(products.map(p => {
+                if (p.id === editingProduct) {
+                    const updatedP = { ...p };
+                    if (updatedP.variants && updatedP.variants.length > 0) {
+                        updatedP.variants[0].stock = parseInt(newStock);
+                    }
+                    return updatedP;
+                }
+                return p;
+            }));
+            Alert.alert('Success', 'Stock updated successfully!');
+            setIsEditModalVisible(false);
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Error', 'Failed to update stock');
+        }
+    };
+
+    // Filter products based on activeTab
+    const filteredProducts = products.filter(p => {
+        const stock = p.variants?.[0]?.stock || 0;
+        if (activeTab === 'active') return stock > 0;
+        return stock === 0;
+    });
 
     return (
         <View style={styles.container}>
@@ -117,49 +204,67 @@ const VendorStockScreen = ({ onNavigateDashboard, onNavigateOrders, onNavigatePr
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
                 >
-                    <ProductCard 
-                        name="Fresh Red Tomatoes" 
-                        category="VEGETABLES" 
-                        price="4.50" 
-                        unit="kg" 
-                        stock={24} 
-                        status="Active" 
-                        image="https://images.unsplash.com/photo-1546473427-e1e6666ba379?w=200"
-                    />
-                    <ProductCard 
-                        name="Organic Curly Kale" 
-                        category="GREENS" 
-                        price="3.20" 
-                        unit="bunch" 
-                        stock={12} 
-                        status="Active" 
-                        image="https://images.unsplash.com/photo-1524179524662-13c2859b416e?w=200"
-                    />
-                    <ProductCard 
-                        name="Large Brown Eggs" 
-                        category="DAIRY & POULTRY" 
-                        price="5.00" 
-                        unit="dozen" 
-                        stock={0} 
-                        status="Inactive" 
-                        image="https://images.unsplash.com/photo-1582722872445-44dc5f7e3cdd?w=200"
-                    />
-                    <ProductCard 
-                        name="Green Bell Peppers" 
-                        category="VEGETABLES" 
-                        price="2.80" 
-                        unit="kg" 
-                        stock={45} 
-                        status="Active" 
-                        image="https://images.unsplash.com/photo-1566385101042-1a000c1268c4?w=200"
-                    />
+                    {loading ? (
+                        <ActivityIndicator color="#38BDF8" style={{ marginTop: 20 }} />
+                    ) : filteredProducts.length > 0 ? (
+                        filteredProducts.map(product => (
+                            <ProductCard 
+                                key={product.id}
+                                id={product.id}
+                                name={product.name} 
+                                category={product.category_name || 'General'} 
+                                price={product.variants?.[0]?.price || '0.00'} 
+                                unit={product.variants?.[0]?.unit || 'kg'} 
+                                stock={product.variants?.[0]?.stock || 0} 
+                                status={product.is_active ? 'Active' : 'Inactive'} 
+                                image={product.image || "https://images.unsplash.com/photo-1546473427-e1e6666ba379?w=200"}
+                                onNotifyAdmin={handleNotifyAdmin}
+                                onEditStock={handleEditStock}
+                                showPrice={activeTab !== 'active'}
+                            />
+                        ))
+                    ) : (
+                        <View style={{ alignItems: 'center', marginTop: 40 }}>
+                            <Text style={{ color: '#64748B' }}>No products found in this category.</Text>
+                        </View>
+                    )}
                 </ScrollView>
             </SafeAreaView>
 
-            {/* Fab Button */}
-            <TouchableOpacity style={styles.fab} onPress={onAddProduct}>
-                <Plus size={32} color="#FFF" />
-            </TouchableOpacity>
+            {/* Edit Stock Modal */}
+            <Modal
+                visible={isEditModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsEditModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Update Stock</Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            keyboardType="numeric"
+                            value={newStock}
+                            onChangeText={setNewStock}
+                            placeholder="Enter new stock quantity"
+                        />
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity 
+                                style={[styles.modalButton, styles.modalCancelButton]} 
+                                onPress={() => setIsEditModalVisible(false)}
+                            >
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.modalButton, styles.modalSaveButton]} 
+                                onPress={submitStockUpdate}
+                            >
+                                <Text style={styles.modalSaveText}>Save</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Bottom Navigation */}
             <View style={styles.bottomNav}>
@@ -401,6 +506,64 @@ const styles = StyleSheet.create({
     },
     activeNavText: {
         color: '#38BDF8',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        width: '80%',
+        backgroundColor: '#FFF',
+        borderRadius: 20,
+        padding: 24,
+        alignItems: 'center',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#1E293B',
+        marginBottom: 16,
+    },
+    modalInput: {
+        width: '100%',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        padding: 12,
+        fontSize: 16,
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+    },
+    modalButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    modalCancelButton: {
+        backgroundColor: '#F1F5F9',
+        marginRight: 8,
+    },
+    modalSaveButton: {
+        backgroundColor: '#38BDF8',
+        marginLeft: 8,
+    },
+    modalCancelText: {
+        color: '#64748B',
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    modalSaveText: {
+        color: '#FFF',
+        fontWeight: 'bold',
+        fontSize: 16,
     },
 });
 

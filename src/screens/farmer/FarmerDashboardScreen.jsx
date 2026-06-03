@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -8,18 +8,21 @@ import {
     Image,
     StatusBar,
     Dimensions,
+    ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-    Bell, 
-    ShoppingBasket, 
-    DollarSign, 
-    TrendingUp, 
-    LayoutDashboard, 
-    ClipboardList, 
-    Package, 
-    User, 
-    Plus 
+import {
+    Bell,
+    ShoppingBasket,
+    DollarSign,
+    TrendingUp,
+    LayoutDashboard,
+    ClipboardList,
+    Package,
+    User,
+    Plus,
+    CheckCircle2
 } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -42,25 +45,98 @@ const StatCard = ({ title, value, percentage, icon: Icon, color }) => (
     </View>
 );
 
-const ProductItem = ({ name, category, sales, image }) => (
+import { API_URLS } from '../../config/api';
+import { apiFunction } from '../../config/apifunction';
+import { useAuth } from '../../context/AuthContext';
+
+const ProductItem = ({ name, category, sales, image, unit, harvest }) => (
     <View style={styles.productItem}>
-        <Image source={{ uri: image }} style={styles.productImage} />
+        <Image
+            source={{ uri: image }}
+            style={styles.productImage}
+        />
         <View style={styles.productInfo}>
             <Text style={styles.productName}>{name}</Text>
-            <Text style={styles.productCategory}>{category}</Text>
+            <Text style={styles.productCategory}>{category || 'Fresh Harvest'}</Text>
+            {harvest && (
+                <Text style={styles.harvestDate}>
+                    Harvest date: {new Date(harvest).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                </Text>
+            )}
         </View>
         <View style={styles.productSales}>
             <Text style={styles.salesCount}>{sales}</Text>
-            <Text style={styles.salesLabel}>SALES</Text>
+            <Text style={styles.salesLabel}>{unit || 'KG'}</Text>
         </View>
     </View>
 );
 
-const VendorDashboardScreen = ({ onNavigateOrders, onNavigateStock, onNavigateProfile, onAddProduct, onLogout }) => {
+const FarmerDashboardScreen = ({ onNavigateOrders, onNavigateStock, onNavigateProfile, onAddProduct, onLogout }) => {
+    const [profile, setProfile] = useState(null);
+    const [todaysOrders, setTodaysOrders] = useState(0);
+    const [totalRevenue, setTotalRevenue] = useState(0);
+    const [newOrdersCount, setNewOrdersCount] = useState(0);
+    const [readyOrdersCount, setReadyOrdersCount] = useState(0);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchDashboardData();
+    }, []);
+
+    const fetchDashboardData = async () => {
+        setLoading(true);
+        try {
+            // Fetch Profile
+            const profileRes = await apiFunction(API_URLS.FARMER_PROFILE, [], {}, 'get', true);
+            if (profileRes.data) {
+                setProfile(profileRes.data);
+            }
+
+            // Fetch Orders
+            const ordersRes = await apiFunction(API_URLS.FARMER_ORDERS, [], {}, 'get', true);
+            if (ordersRes.data && ordersRes.data.results) {
+                // Get ready states from AsyncStorage
+                let readyIds = [];
+                try {
+                    const stored = await AsyncStorage.getItem('readyOrderIds');
+                    if (stored) readyIds = JSON.parse(stored);
+                } catch (e) {
+                    console.error('Failed to load readyOrderIds', e);
+                }
+
+                const today = new Date().toISOString().split('T')[0];
+                const tOrders = ordersRes.data.results.filter(o => o.batch_date === today).length;
+
+                const rev = ordersRes.data.results.reduce((sum, o) => {
+                    const price = parseFloat(o.price) || 0;
+                    return sum + price;
+                }, 0);
+
+                let readyCount = 0;
+                let newCount = 0;
+                ordersRes.data.results.forEach(o => {
+                    if (readyIds.includes(o.id.toString())) {
+                        readyCount++;
+                    } else {
+                        newCount++;
+                    }
+                });
+
+                setTodaysOrders(tOrders);
+                setTotalRevenue(rev);
+                setReadyOrdersCount(readyCount);
+                setNewOrdersCount(newCount);
+            }
+        } catch (error) {
+            console.error('Dashboard data fetch error:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            
+
             {/* Header Section */}
             <LinearGradient
                 colors={['#38BDF8', '#0EA5E9']}
@@ -69,13 +145,19 @@ const VendorDashboardScreen = ({ onNavigateOrders, onNavigateStock, onNavigatePr
                 <SafeAreaView edges={['top']}>
                     <View style={styles.headerContent}>
                         <View style={styles.userInfo}>
-                            <Image 
-                                source={{ uri: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400' }} 
-                                style={styles.avatar} 
+                            <Image
+                                source={{ uri: profile?.image || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400' }}
+                                style={styles.avatar}
                             />
                             <View>
                                 <Text style={styles.welcomeText}>Welcome back,</Text>
-                                <Text style={styles.userName}>Green Valley Farm</Text>
+                                <Text style={styles.userName}>
+                                    {profile
+                                        ? ((profile.first_name && profile.last_name)
+                                            ? `${profile.first_name} ${profile.last_name}`
+                                            : profile.first_name || profile.farm_name || 'Green Valley Farm')
+                                        : 'Green Valley Farm'}
+                                </Text>
                             </View>
                         </View>
                         <TouchableOpacity style={styles.notificationButton}>
@@ -86,26 +168,44 @@ const VendorDashboardScreen = ({ onNavigateOrders, onNavigateStock, onNavigatePr
                 </SafeAreaView>
             </LinearGradient>
 
-            <ScrollView 
-                style={styles.scrollView} 
+            <ScrollView
+                style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
-                {/* Stats Row */}
+                {/* Stats Row 1 */}
                 <View style={styles.statsRow}>
-                    <StatCard 
-                        title="TODAY'S ORDERS" 
-                        value="24" 
-                        percentage="+12%" 
-                        icon={ShoppingBasket} 
+                    <StatCard
+                        title="TODAY'S ORDERS"
+                        value={todaysOrders.toString()}
+                        percentage="Today"
+                        icon={ShoppingBasket}
                         color="#38BDF8"
                     />
-                    <StatCard 
-                        title="REVENUE" 
-                        value="$1,240" 
-                        percentage="+5%" 
-                        icon={DollarSign} 
+                    <StatCard
+                        title="REVENUE"
+                        value={`₹${totalRevenue.toFixed(0)}`}
+                        percentage="Total"
+                        icon={DollarSign}
                         color="#10B981"
+                    />
+                </View>
+
+                {/* Stats Row 2 */}
+                <View style={styles.statsRow}>
+                    <StatCard
+                        title="NEW ORDERS"
+                        value={newOrdersCount.toString()}
+                        percentage="Pending"
+                        icon={Package}
+                        color="#F59E0B"
+                    />
+                    <StatCard
+                        title="READY ORDERS"
+                        value={readyOrdersCount.toString()}
+                        percentage="Ready"
+                        icon={CheckCircle2}
+                        color="#8B5CF6"
                     />
                 </View>
 
@@ -135,40 +235,7 @@ const VendorDashboardScreen = ({ onNavigateOrders, onNavigateStock, onNavigatePr
                         </View>
                     </View>
                 </View>
-
-                {/* Top Products */}
-                <View style={styles.productsSection}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Top Selling Products</Text>
-                        <TouchableOpacity>
-                            <Text style={styles.viewAllLink}>View All</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <ProductItem 
-                        name="Organic Tomatoes" 
-                        category="Fresh Harvest" 
-                        sales="482" 
-                        image="https://images.unsplash.com/photo-1546473427-e1e6666ba379?w=200"
-                    />
-                    <ProductItem 
-                        name="Fresh Eggs" 
-                        category="Free Range" 
-                        sales="356" 
-                        image="https://images.unsplash.com/photo-1582722872445-44dc5f7e3cdd?w=200"
-                    />
-                    <ProductItem 
-                        name="Organic Kale" 
-                        category="Superfood" 
-                        sales="214" 
-                        image="https://images.unsplash.com/photo-1524179524662-13c2859b416e?w=200"
-                    />
-                </View>
             </ScrollView>
-
-            {/* Fab Button */}
-            <TouchableOpacity style={styles.fab} onPress={onAddProduct}>
-                <Plus size={32} color="#FFF" />
-            </TouchableOpacity>
 
             {/* Bottom Navigation */}
             <View style={styles.bottomNav}>
@@ -396,6 +463,12 @@ const styles = StyleSheet.create({
         color: '#94A3B8',
         fontWeight: '500',
     },
+    harvestDate: {
+        fontSize: 11,
+        color: '#38BDF8',
+        fontWeight: '600',
+        marginTop: 2,
+    },
     productSales: {
         alignItems: 'flex-end',
         paddingRight: 8,
@@ -409,22 +482,6 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '800',
         color: '#94A3B8',
-    },
-    fab: {
-        position: 'absolute',
-        right: 24,
-        bottom: 84,
-        width: 64,
-        height: 64,
-        backgroundColor: '#38BDF8',
-        borderRadius: 32,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#38BDF8',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 15,
-        elevation: 8,
     },
     bottomNav: {
         position: 'absolute',
@@ -456,6 +513,25 @@ const styles = StyleSheet.create({
     activeNavText: {
         color: '#38BDF8',
     },
+    emptyState: {
+        alignItems: 'center',
+        paddingVertical: 30,
+        backgroundColor: '#FFF',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    addLink: {
+        fontSize: 14,
+        color: '#38BDF8',
+        fontWeight: '700',
+        marginTop: 8,
+    },
 });
 
-export default VendorDashboardScreen;
+export default FarmerDashboardScreen;
